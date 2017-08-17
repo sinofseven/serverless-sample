@@ -1,0 +1,9 @@
+# twitter tokens
+twitter:
+  consumer:
+    token: (edit)
+    secret: (edit)
+  access:
+    token: (edit)
+    secret: (edit)
+

@@ -1,0 +1,17 @@
+{
+  "name": "01_cognito-identity-get-id-by-twitter",
+  "description": "Get id Using Cognito Federated Identity and Twitter",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "npm install && sls deploy -v",
+    "destroy": "sls remove -v",
+    "federate": "sls invoke -f federate",
+    "execute": "npm install && sls deploy -v && sls invoke -f federate"
+  },
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "serverless": "^1.20.0"
+  }
+}

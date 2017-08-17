@@ -1,0 +1,152 @@
+service: federation-test
+
+custom: ${file(./config.yml)}
+
+provider:
+  name: aws
+  runtime: nodejs6.10
+  region: ap-northeast-1
+  stage: v01
+  timeout: 120
+  memorySize: 256
+  cfLogs: true
+  apiKey: false
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - "xray:PutTraceSegments"
+        - "xray:PutTelemetryRecords"
+      Resource:
+        - "*"
+    - Effect: Allow
+      Action:
+        - "logs:CreateLogGroup"
+        - "logs:CreateLogStream"
+        - "logs:PutLogEvents"
+      Resource:
+        - "arn:aws:logs:*:*:*"
+
+package:
+  include:
+    - serverless.yml
+    - src/**
+  exclude:
+    - .git/**
+
+functions:
+  env:
+    handler: src/env.handler
+  federate:
+    handler: src/federate.handler
+    environment:
+      COGNITO_REGION: ${self:provider.region}
+      ACCESS_TOKEN: ${self:custom.twitter.access.token}
+      ACCESS_SECRET: ${self:custom.twitter.access.secret}
+
+resources:
+  Resources:
+    EnvLambdaFunction:
+      Properties:
+        Environment:
+          Variables:
+            IDENTITY:
+              Ref: IdentityPool
+    FederateLambdaFunction:
+      Properties:
+        Environment:
+          Variables:
+            IDENTITY:
+              Ref: IdentityPool
+    IdentityPool:
+      Type: AWS::Cognito::IdentityPool
+      Properties:
+        AllowUnauthenticatedIdentities: false
+        SupportedLoginProviders:
+          "api.twitter.com": "${self:custom.twitter.consumer.token};${self:custom.twitter.consumer.secret}"
+    UnauthenticatedPolicy:
+      Type: AWS::IAM::ManagedPolicy
+      Properties:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: Allow
+            Action:
+            - mobileanalytics:PutEvents
+            - cognito-sync:*
+            Resource:
+            - "*"
+    UnauthenticatedRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRoleWithWebIdentity"
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud":
+                  Ref: IdentityPool
+              ForAnyValue:StringLike:
+                "cognito-identity.amazonaws.com:amr": unauthenticated
+        ManagedPolicyArns:
+        - Ref: UnauthenticatedPolicy
+    AuthenticatedPolicy:
+      Type: AWS::IAM::ManagedPolicy
+      Properties:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: Allow
+            Action:
+            - mobileanalytics:PutEvents
+            - cognito-sync:*
+            - cognito-identity:*
+            Resource:
+            - "*"
+    AuthenticatedRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRoleWithWebIdentity"
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud":
+                  Ref: IdentityPool
+              ForAnyValue:StringLike:
+                "cognito-identity.amazonaws.com:amr": authenticated
+        ManagedPolicyArns:
+        - Ref: AuthenticatedPolicy
+    RoleAttachment:
+      Type: AWS::Cognito::IdentityPoolRoleAttachment
+      Properties:
+        IdentityPoolId:
+          Ref: IdentityPool
+        Roles:
+          unauthenticated:
+            Fn::GetAtt:
+            - UnauthenticatedRole
+            - Arn
+          authenticated:
+            Fn::GetAtt:
+            - AuthenticatedRole
+            - Arn
+  Outputs:
+    IdentityPool:
+      Value:
+        Ref: IdentityPool
+    UnauthenticatedRole:
+      Value:
+        Ref: UnauthenticatedRole
+    AuthenticatedRole:
+      Value:
+        Ref: AuthenticatedRole
+
+
